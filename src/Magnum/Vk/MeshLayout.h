@@ -159,7 +159,7 @@ In case @ref isMeshPrimitiveImplementationSpecific() returns @cpp false @ce for
 Not all generic mesh primitives have a Vulkan equivalent and this function
 expects that given primitive is available. Use @ref hasMeshPrimitive() to query
 availability of given primitive.
-@see @ref vkIndexType()
+@see @ref meshIndexType(), @ref vertexFormat()
 */
 MAGNUM_VK_EXPORT MeshPrimitive meshPrimitive(Magnum::MeshPrimitive primitive);
 
@@ -417,6 +417,11 @@ class MAGNUM_VK_EXPORT MeshLayout {
         MAGNUM_VK_LOCAL bool hasNoExternalPointers() const;
         #endif
 
+        /* These are here instead of in the State struct in order to avoid
+           unnecessary allocations for buffer-less layouts --  like with GL, we
+           want `draw(Mesh{MeshLayout{MeshPrimitive::Triangle}}.setCount(3))`
+           to be performant enough to not need to invent any alternatives. The
+           Mesh class does a similar thing. */
         VkPipelineVertexInputStateCreateInfo _vertexInfo;
         VkPipelineInputAssemblyStateCreateInfo _assemblyInfo;
 
