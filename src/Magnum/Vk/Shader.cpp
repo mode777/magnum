@@ -26,11 +26,14 @@
 #include "Shader.h"
 #include "ShaderCreateInfo.h"
 
-#include <Corrade/Containers/ArrayView.h>
+#include <Corrade/Containers/Array.h>
+#include <Corrade/Utility/Algorithms.h>
 
 #include "Magnum/Vk/Assert.h"
 #include "Magnum/Vk/Device.h"
 #include "Magnum/Vk/Handle.h"
+#include "Magnum/Vk/Implementation/DeviceState.h"
+#include "Magnum/Vk/Implementation/SpirvPatching.h"
 
 namespace Magnum { namespace Vk {
 
@@ -87,7 +90,7 @@ Shader Shader::wrap(Device& device, const VkShaderModule handle, const HandleFla
 }
 
 Shader::Shader(Device& device, const ShaderCreateInfo& info): _device{&device}, _flags{HandleFlag::DestroyOnDestruction} {
-    MAGNUM_VK_INTERNAL_ASSERT_SUCCESS(device->CreateShaderModule(device, info, nullptr, &_handle));
+    MAGNUM_VK_INTERNAL_ASSERT_SUCCESS(device.state().createShaderImplementation(device, *info, nullptr, _handle));
 }
 
 Shader::Shader(NoCreateT): _device{}, _handle{} {}
@@ -113,6 +116,27 @@ VkShaderModule Shader::release() {
     const VkShaderModule handle = _handle;
     _handle = {};
     return handle;
+}
+
+VkResult Shader::createImplementationDefault(Device& device, const VkShaderModuleCreateInfo& info, const VkAllocationCallbacks* callbacks, VkShaderModule& handle) {
+    return device->CreateShaderModule(device, &info, callbacks, &handle);
+}
+
+VkResult Shader::createImplementationSwiftShaderMultiEntryPointPatching(Device& device, const VkShaderModuleCreateInfo& info, const VkAllocationCallbacks* callbacks, VkShaderModule& handle) {
+    /* Can't use {} with GCC 4.8 here because it tries to initialize the first
+       member instead of doing a copy */
+    VkShaderModuleCreateInfo patchedInfo(info);
+
+    Containers::Array<UnsignedInt> code;
+    if(Implementation::isSpirv(info.pCode, info.codeSize)) {
+        code = Containers::Array<UnsignedInt>{Containers::NoInit, info.codeSize/4};
+        Utility::copy(Containers::ArrayView<const UnsignedInt>{info.pCode, info.codeSize/4}, code);
+
+        Implementation::spirvPatchSwiftShaderConflictingMultiEntrypointLocations(code);
+        patchedInfo.pCode = code;
+    }
+
+    return createImplementationDefault(device, patchedInfo, callbacks, handle);
 }
 
 }}
